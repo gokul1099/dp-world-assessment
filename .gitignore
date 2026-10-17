@@ -1,0 +1,29 @@
+# Secrets / local env (examples are committed)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node (frontend/.gitignore covers the rest)
+node_modules/
+
+# Sample licences & uploads contain personal data
+samples/
+uploads/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local Claude Code overrides
+.claude/settings.local.json

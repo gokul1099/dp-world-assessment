@@ -1,5 +1,10 @@
 import { apiRequest } from "@/api/client";
-import type { AskResponse, DocumentResponse, HealthResponse } from "@/types/licence";
+import type {
+  AskResponse,
+  DocumentResponse,
+  HealthResponse,
+  LicenceFields,
+} from "@/types/licence";
 
 // OCR + LLM extraction can be slow, so uploads get a longer timeout.
 const UPLOAD_TIMEOUT_MS = 120_000;
@@ -21,6 +26,16 @@ export function uploadDocument(file: File, signal?: AbortSignal): Promise<Docume
 
 export function getDocument(documentId: string): Promise<DocumentResponse> {
   return apiRequest<DocumentResponse>(`/documents/${encodeURIComponent(documentId)}`);
+}
+
+export function updateDocumentFields(
+  documentId: string,
+  fields: LicenceFields,
+): Promise<DocumentResponse> {
+  return apiRequest<DocumentResponse>(`/documents/${encodeURIComponent(documentId)}/fields`, {
+    method: "PUT",
+    body: fields,
+  });
 }
 
 export function askDocument(
