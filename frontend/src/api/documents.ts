@@ -1,4 +1,5 @@
 import { apiRequest } from "@/api/client";
+import { mockUploadDocument } from "@/api/mock";
 import type {
   AskResponse,
   DocumentResponse,
@@ -9,11 +10,15 @@ import type {
 // OCR + LLM extraction can be slow, so uploads get a longer timeout.
 const UPLOAD_TIMEOUT_MS = 120_000;
 
+// Referenced literally so Next.js inlines it; see src/api/mock.ts.
+const USE_MOCK = process.env.NEXT_PUBLIC_API_MOCK === "true";
+
 export function getHealth(): Promise<HealthResponse> {
   return apiRequest<HealthResponse>("/health", { timeoutMs: 10_000 });
 }
 
 export function uploadDocument(file: File, signal?: AbortSignal): Promise<DocumentResponse> {
+  if (USE_MOCK) return mockUploadDocument(file, signal);
   const form = new FormData();
   form.append("file", file);
   return apiRequest<DocumentResponse>("/documents", {

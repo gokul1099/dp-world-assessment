@@ -9,6 +9,8 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.18",
+    "pypdfium2>=5.14.0",
+    "pillow>=13.0.0",
 ]
 
 [dependency-groups]
