@@ -2,50 +2,87 @@
 
 import { useState } from "react";
 
+import { ChatPanel } from "@/features/chat/ChatPanel";
+import { LicenceForm } from "@/features/extraction-form/LicenceForm";
 import { UploadPanel } from "@/features/upload/UploadPanel";
 import { formatFileSize } from "@/features/upload/validation";
-import type { DocumentResponse } from "@/types/licence";
+import type { DocumentResponse, LicenceFields } from "@/types/licence";
 
 interface UploadedDocument {
   document: DocumentResponse;
   file: File;
 }
 
-// Client-side state for the current document. Each feature panel plugs in here.
+type Step = "review" | "chat";
+
+// Client-side state for the current document: upload → review & save → chat.
 export function LicenceWorkspace() {
   const [uploaded, setUploaded] = useState<UploadedDocument | null>(null);
+  const [step, setStep] = useState<Step>("review");
 
   if (!uploaded) {
-    return <UploadPanel onUploaded={(document, file) => setUploaded({ document, file })} />;
+    return (
+      <UploadPanel
+        onUploaded={(document, file) => {
+          setUploaded({ document, file });
+          setStep("review");
+        }}
+      />
+    );
   }
 
   const { document, file } = uploaded;
+
+  function handleSaved(fields: LicenceFields) {
+    // Keep the saved values so "Edit details" reopens the form with them.
+    setUploaded((prev) => prev && { ...prev, document: { ...prev.document, fields } });
+    setStep("chat");
+  }
+
   return (
-    <section
-      aria-label="Uploaded document"
-      className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-8"
-    >
-      <p className="text-sm font-medium text-green-700 dark:text-green-400" role="status">
-        Document uploaded
-      </p>
-      <h2 className="mt-1 truncate text-lg font-semibold" title={document.filename}>
-        {document.filename}
-      </h2>
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <dt className="text-zinc-500">Size</dt>
-        <dd>{formatFileSize(file.size)}</dd>
-        <dt className="text-zinc-500">Pages</dt>
-        <dd>{document.page_count}</dd>
-        <dt className="text-zinc-500">Status</dt>
-        <dd className="capitalize">{document.status}</dd>
-      </dl>
-      <button
-        type="button"
-        onClick={() => setUploaded(null)}
-        className="mt-6 inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 px-4 text-sm font-medium transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:hover:bg-zinc-900"
+    <div className="flex w-full max-w-3xl flex-col gap-6">
+      <section
+        aria-label="Uploaded document"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white px-6 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
       >
-        Upload another document
-      </button>
-    </section>
+        <div className="min-w-0">
+          <h2 className="truncate font-semibold" title={document.filename}>
+            {document.filename}
+          </h2>
+          <p className="text-sm text-zinc-500">
+            {formatFileSize(file.size)} · {document.page_count}{" "}
+            {document.page_count === 1 ? "page" : "pages"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setUploaded(null)}
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 px-4 text-sm font-medium transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          Upload another document
+        </button>
+      </section>
+
+      {!document.fields ? (
+        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+          No details could be extracted from this document.
+        </p>
+      ) : step === "review" ? (
+        // key resets the form's state when a new document is uploaded
+        <LicenceForm
+          key={document.document_id}
+          documentId={document.document_id}
+          fields={document.fields}
+          onSaved={handleSaved}
+        />
+      ) : (
+        <ChatPanel
+          key={document.document_id}
+          documentId={document.document_id}
+          holderName={document.fields.full_name.value}
+          onEditDetails={() => setStep("review")}
+        />
+      )}
+    </div>
   );
 }

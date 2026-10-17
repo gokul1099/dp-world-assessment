@@ -36,6 +36,17 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const isUploading = state.status === "uploading";
+
+  // The request covers upload + OCR/extraction; after a moment, say we're reading the document.
+  const [isReading, setIsReading] = useState(false);
+  useEffect(() => {
+    if (!isUploading) return;
+    const timer = setTimeout(() => setIsReading(true), 1200);
+    return () => {
+      clearTimeout(timer);
+      setIsReading(false);
+    };
+  }, [isUploading]);
   const error = state.status === "uploading" ? null : state.error;
 
   function openPicker() {
@@ -119,7 +130,9 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
           {isUploading && (
             <p className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
               <Spinner />
-              Uploading and processing… this can take a few seconds.
+              {isReading
+                ? "Reading document and extracting details…"
+                : "Uploading document…"}
             </p>
           )}
         </div>

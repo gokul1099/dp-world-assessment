@@ -18,6 +18,8 @@ node_modules/
 # Sample licences & uploads contain personal data
 samples/
 uploads/
+# Milvus Lite db + embedding model cache
+backend/data/
 
 # OS / editors
 .DS_Store

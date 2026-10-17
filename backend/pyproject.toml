@@ -10,8 +10,11 @@ dependencies = [
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.18",
     "pypdfium2>=5.14.0",
-    "pillow>=13.0.0",
+    "pillow>=10.3,<13",
     "groq>=1.7.0",
+    "pymilvus",
+    "fastembed>=0.7",
+    "milvus-lite>=3.2.2",
 ]
 
 [dependency-groups]

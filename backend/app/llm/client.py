@@ -46,6 +46,7 @@ def image_to_json(png: bytes, prompt: str, schema: dict[str, Any], name: str) ->
             response = get_groq_client().chat.completions.create(
                 model=settings.groq_vision_model,
                 temperature=0,
+                max_tokens=1000,  # Groq free tier for this model: 1000 output tokens/minute
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": name, "strict": True, "schema": schema},
@@ -64,3 +65,29 @@ def image_to_json(png: bytes, prompt: str, schema: dict[str, Any], name: str) ->
         except (GroqError, json.JSONDecodeError) as exc:
             last_error = exc
     raise ExtractionError("The document could not be read. Please try again.") from last_error
+
+
+def chat_json(system: str, user: str, schema: dict[str, Any], name: str) -> dict[str, Any]:
+    """Text-only chat call that returns JSON matching `schema` (strict structured output)."""
+    settings = get_settings()
+    last_error: Exception | None = None
+    for _attempt in range(2):
+        try:
+            response = get_groq_client().chat.completions.create(
+                model=settings.groq_chat_model,
+                temperature=0,
+                max_tokens=600,
+                reasoning_effort="low",  # gpt-oss: short answers don't need long reasoning
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": name, "strict": True, "schema": schema},
+                },
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+            return json.loads(response.choices[0].message.content or "")
+        except (GroqError, json.JSONDecodeError) as exc:
+            last_error = exc
+    raise ExtractionError("Could not get an answer right now. Please try again.") from last_error
