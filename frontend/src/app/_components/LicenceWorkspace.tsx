@@ -6,6 +6,7 @@ import { ChatPanel } from "@/features/chat/ChatPanel";
 import { LicenceForm } from "@/features/extraction-form/LicenceForm";
 import { UploadPanel } from "@/features/upload/UploadPanel";
 import { formatFileSize } from "@/features/upload/validation";
+import { DocumentViewer } from "@/features/viewer/DocumentViewer";
 import type { DocumentResponse, LicenceFields } from "@/types/licence";
 
 interface UploadedDocument {
@@ -15,10 +16,12 @@ interface UploadedDocument {
 
 type Step = "review" | "chat";
 
-// Client-side state for the current document: upload → review & save → chat.
+// Client-side state for the current document: upload → review & save → chat,
+// with the document shown beside the form/chat so the user can verify everything.
 export function LicenceWorkspace() {
   const [uploaded, setUploaded] = useState<UploadedDocument | null>(null);
   const [step, setStep] = useState<Step>("review");
+  const [page, setPage] = useState(1);
 
   if (!uploaded) {
     return (
@@ -26,6 +29,7 @@ export function LicenceWorkspace() {
         onUploaded={(document, file) => {
           setUploaded({ document, file });
           setStep("review");
+          setPage(1);
         }}
       />
     );
@@ -39,10 +43,18 @@ export function LicenceWorkspace() {
     setStep("chat");
   }
 
+  function showPage(target: number) {
+    setPage(Math.min(Math.max(target, 1), document.page_count));
+    // On narrow screens the viewer is above the form: bring it into view.
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      window.document.getElementById("viewer-title")?.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-6">
+    <div className="flex w-full max-w-6xl flex-col gap-6">
       <section
-        aria-label="Uploaded document"
+        aria-label="Uploaded file"
         className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white px-6 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
       >
         <div className="min-w-0">
@@ -63,26 +75,40 @@ export function LicenceWorkspace() {
         </button>
       </section>
 
-      {!document.fields ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-          No details could be extracted from this document.
-        </p>
-      ) : step === "review" ? (
-        // key resets the form's state when a new document is uploaded
-        <LicenceForm
-          key={document.document_id}
-          documentId={document.document_id}
-          fields={document.fields}
-          onSaved={handleSaved}
-        />
-      ) : (
-        <ChatPanel
-          key={document.document_id}
-          documentId={document.document_id}
-          holderName={document.fields.full_name.value}
-          onEditDetails={() => setStep("review")}
-        />
-      )}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        {/* Sticky on desktop so the document stays visible while scrolling the form. */}
+        <div className="lg:sticky lg:top-6">
+          <DocumentViewer
+            documentId={document.document_id}
+            pageCount={document.page_count}
+            page={page}
+            onPageChange={showPage}
+          />
+        </div>
+
+        {!document.fields ? (
+          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+            No details could be extracted from this document.
+          </p>
+        ) : step === "review" ? (
+          // key resets the form's state when a new document is uploaded
+          <LicenceForm
+            key={document.document_id}
+            documentId={document.document_id}
+            fields={document.fields}
+            onSaved={handleSaved}
+            onShowPage={showPage}
+          />
+        ) : (
+          <ChatPanel
+            key={document.document_id}
+            documentId={document.document_id}
+            holderName={document.fields.full_name.value}
+            onEditDetails={() => setStep("review")}
+            onShowPage={showPage}
+          />
+        )}
+      </div>
     </div>
   );
 }

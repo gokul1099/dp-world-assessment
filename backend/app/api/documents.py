@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
 from app.api.deps import DocumentStoreDep, SettingsDep, VectorStoreDep
@@ -109,3 +109,18 @@ async def save_document_fields(
     document.fields = fields
     logger.info("Saved fields for document %s", document.document_id)
     return _to_response(document)
+
+
+@router.get("/{document_id}/pages/{page}", response_class=Response)
+async def get_page_image(document_id: uuid.UUID, page: int, store: DocumentStoreDep) -> Response:
+    """One rendered page (PNG) for the side-by-side viewer. `page` is 1-based."""
+    document = store.get(str(document_id))
+    if document is None:
+        raise NotFoundError("Document not found. Please upload it again.")
+    if not 1 <= page <= document.page_count:
+        raise NotFoundError("Page not found.")
+    return Response(
+        content=document.pages[page - 1],
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )

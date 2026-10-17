@@ -13,6 +13,8 @@ interface ChatPanelProps {
   /** Holder's full name from the saved licence, used for the greeting. */
   holderName: string | null;
   onEditDetails: () => void;
+  /** Show a page of the document in the viewer (from an answer's "Page N" badge). */
+  onShowPage: (page: number) => void;
 }
 
 type Message =
@@ -36,7 +38,12 @@ function firstName(fullName: string | null): string | null {
 }
 
 // Feature 5 — ask questions answered only from the uploaded document.
-export function ChatPanel({ documentId, holderName, onEditDetails }: ChatPanelProps) {
+export function ChatPanel({
+  documentId,
+  holderName,
+  onEditDetails,
+  onShowPage,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
@@ -134,7 +141,7 @@ export function ChatPanel({ documentId, holderName, onEditDetails }: ChatPanelPr
         )}
 
         {messages.map((message, index) => (
-          <ChatMessage key={index} message={message} />
+          <ChatMessage key={index} message={message} onShowPage={onShowPage} />
         ))}
 
         {asking && (
@@ -182,7 +189,13 @@ export function ChatPanel({ documentId, holderName, onEditDetails }: ChatPanelPr
   );
 }
 
-function ChatMessage({ message }: { message: Message }) {
+function ChatMessage({
+  message,
+  onShowPage,
+}: {
+  message: Message;
+  onShowPage: (page: number) => void;
+}) {
   if (message.role === "user") {
     return (
       <div className="self-end rounded-2xl rounded-br-sm bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
@@ -211,7 +224,7 @@ function ChatMessage({ message }: { message: Message }) {
       {message.sources.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {message.sources.map((source, i) => (
-            <SourceBadge key={`${source.page}-${i}`} source={source} />
+            <SourceBadge key={`${source.page}-${i}`} source={source} onShowPage={onShowPage} />
           ))}
         </div>
       )}

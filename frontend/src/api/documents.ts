@@ -1,4 +1,4 @@
-import { apiRequest } from "@/api/client";
+import { apiRequest, baseUrl } from "@/api/client";
 import { mockUploadDocument } from "@/api/mock";
 import type {
   AskResponse,
@@ -54,4 +54,9 @@ export function askDocument(
     signal,
     timeoutMs: 60_000,
   });
+}
+
+/** URL of one rendered page image (1-based), for <img src>. */
+export function pageImageUrl(documentId: string, page: number): string {
+  return `${baseUrl()}/documents/${encodeURIComponent(documentId)}/pages/${page}`;
 }

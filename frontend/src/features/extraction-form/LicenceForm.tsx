@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ApiError } from "@/api/client";
 import { updateDocumentFields } from "@/api/documents";
+import { SourceBadge } from "@/features/chat/SourceBadge";
 import type { LicenceFields } from "@/types/licence";
 
 interface LicenceFormProps {
@@ -11,6 +12,8 @@ interface LicenceFormProps {
   fields: LicenceFields;
   /** Called with the saved fields once the backend has stored them. */
   onSaved: (fields: LicenceFields) => void;
+  /** Show a page of the document in the viewer (from a field's "Page N" badge). */
+  onShowPage: (page: number) => void;
 }
 
 type MainFieldKey = Exclude<keyof LicenceFields, "other_fields">;
@@ -39,6 +42,7 @@ interface OtherValue {
   key: string; // original key from the API, kept so saving maps back correctly
   label: string;
   value: string;
+  page: number | null;
 }
 
 // Turn the API's extracted fields into plain strings for inputs.
@@ -56,6 +60,7 @@ function toOtherValues(fields: LicenceFields): OtherValue[] {
     key,
     label: (key.charAt(0).toUpperCase() + key.slice(1)).replace(/_/g, " "),
     value: field.value ?? "",
+    page: field.source_page,
   }));
 }
 
@@ -96,7 +101,7 @@ function validate(values: FormValues): FormErrors {
 }
 
 // Features 3 & 4 — auto-populated form the user reviews, corrects and saves.
-export function LicenceForm({ documentId, fields, onSaved }: LicenceFormProps) {
+export function LicenceForm({ documentId, fields, onSaved, onShowPage }: LicenceFormProps) {
   const [values, setValues] = useState<FormValues>(() => toFormValues(fields));
   const [other, setOther] = useState<OtherValue[]>(() => toOtherValues(fields));
   const [errors, setErrors] = useState<FormErrors>({});
@@ -158,6 +163,8 @@ export function LicenceForm({ documentId, fields, onSaved }: LicenceFormProps) {
             value={values[config.key]}
             error={errors[config.key]}
             notFound={fields[config.key].value === null}
+            page={fields[config.key].source_page}
+            onShowPage={onShowPage}
             disabled={saving}
             onChange={(value) => update(config.key, value)}
           />
@@ -169,16 +176,22 @@ export function LicenceForm({ documentId, fields, onSaved }: LicenceFormProps) {
               Other information
             </h3>
             {other.map((item, index) => (
-              <label key={item.key} className="flex flex-col gap-1.5">
-                <span className={labelClass}>{item.label}</span>
+              <div key={item.key} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor={`other-${item.key}`} className={labelClass}>
+                    {item.label}
+                  </label>
+                  {item.page && <SourceBadge source={{ page: item.page, snippet: null }} onShowPage={onShowPage} />}
+                </div>
                 <input
+                  id={`other-${item.key}`}
                   type="text"
                   value={item.value}
                   disabled={saving}
                   onChange={(e) => updateOther(index, e.target.value)}
                   className={inputClass}
                 />
-              </label>
+              </div>
             ))}
           </div>
         )}
@@ -215,11 +228,13 @@ interface FieldProps {
   value: string;
   error?: string;
   notFound: boolean;
+  page: number | null;
+  onShowPage: (page: number) => void;
   disabled: boolean;
   onChange: (value: string) => void;
 }
 
-function Field({ config, value, error, notFound, disabled, onChange }: FieldProps) {
+function Field({ config, value, error, notFound, page, onShowPage, disabled, onChange }: FieldProps) {
   const id = `field-${config.key}`;
   const messageId = `${id}-message`;
   const showNotFound = !error && notFound && value === "";
@@ -235,10 +250,13 @@ function Field({ config, value, error, notFound, disabled, onChange }: FieldProp
 
   return (
     <div className={`flex flex-col gap-1.5 ${wide ? "sm:col-span-2" : ""}`}>
-      <label htmlFor={id} className={labelClass}>
-        {config.label}
-        {config.required && <span className="text-red-600"> *</span>}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className={labelClass}>
+          {config.label}
+          {config.required && <span className="text-red-600"> *</span>}
+        </label>
+        {page && <SourceBadge source={{ page, snippet: null }} onShowPage={onShowPage} />}
+      </div>
       {config.type === "textarea" ? (
         <textarea {...common} rows={2} onChange={(e) => onChange(e.target.value)} />
       ) : (

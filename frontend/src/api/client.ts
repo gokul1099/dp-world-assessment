@@ -24,7 +24,7 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   timeoutMs?: number;
 }
 
-function baseUrl(): string {
+export function baseUrl(): string {
   if (!API_URL) {
     throw new ApiError(
       "NEXT_PUBLIC_API_URL is not set. Copy .env.example to .env.local.",
