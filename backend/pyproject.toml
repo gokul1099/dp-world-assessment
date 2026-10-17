@@ -11,6 +11,7 @@ dependencies = [
     "python-multipart>=0.0.18",
     "pypdfium2>=5.14.0",
     "pillow>=13.0.0",
+    "groq>=1.7.0",
 ]
 
 [dependency-groups]

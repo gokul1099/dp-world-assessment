@@ -18,9 +18,12 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
 
     # Injected from Secret Manager on Cloud Run; optional so /health works without it.
-    llm_api_key: SecretStr | None = None
+    groq_api_key: SecretStr | None = None
+    groq_vision_model: str = "qwen/qwen3.8-27b"
 
     max_upload_mb: int = Field(default=10, gt=0, le=30)  # Cloud Run caps HTTP/1 bodies at 32 MB
+    max_pdf_pages: int = Field(default=10, gt=0)  # licences are 1–2 pages
+    max_stored_documents: int = Field(default=50, gt=0)  # in-memory store; oldest evicted
 
     @property
     def cors_origins(self) -> list[str]:

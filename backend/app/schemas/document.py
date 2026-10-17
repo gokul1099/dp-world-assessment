@@ -14,3 +14,13 @@ class DocumentResponse(BaseModel):
     page_count: int
     status: DocumentStatus
     fields: LicenceFields | None = None
+
+
+class PageText(BaseModel):
+    page: int  # 1-based
+    text: str
+
+
+class DocumentTextResponse(BaseModel):
+    document_id: str
+    pages: list[PageText]
