@@ -32,7 +32,7 @@ with page citations, and the document stays visible next to the data so you can 
 | Vision LLM (OCR + extraction) | Groq `qwen/qwen3.8-27b` with strict JSON-schema structured output |
 | Chat LLM (answers) | Groq `openai/gpt-oss-120b` with strict JSON-schema structured output |
 | Embeddings | `fastembed` with `BAAI/bge-small-en-v1.5` (384-dim, local ONNX on CPU, no API key) |
-| Vector database | **Milvus Lite**: embedded in the backend process, stored in a file, no separate server or port |
+| Vector database | **Milvus Lite**: embedded in the backend process, stored in a file, no separate server or port. **Hybrid search** combines dense vectors with Milvus's built-in BM25 full-text search |
 | Hosting | **Google Cloud Run**: two services, `dl-frontend` (Next.js) and `dl-backend` (FastAPI) |
 
 ---
@@ -106,8 +106,9 @@ with page citations, and the document stays visible next to the data so you can 
    an embedding of a short summary). Each field becomes a short chunk ("Licence expiry date
    (valid until): 2030-02-28", page 1) in `licence_chunks`, replacing earlier field chunks for
    that document.
-3. **Ask (`POST /documents/{id}/ask`):** the question is embedded, then a Milvus search runs
-   **with the filter `document_id == "<id>"` inside the search** (top 10). The numbered excerpts
+3. **Ask (`POST /documents/{id}/ask`):** a **hybrid search** runs in Milvus: dense embedding
+   similarity and BM25 keyword matching, merged with Reciprocal Rank Fusion. Both run **with the
+   filter `document_id == "<id>"` inside the search** (top 10). The numbered excerpts
    go to the chat model, which returns `{answer, found, used_excerpts}`. Page citations are built
    only from the excerpts the model says it used.
 4. **View (`GET /documents/{id}/pages/{n}`):** serves the rendered page images to the viewer.
@@ -249,8 +250,18 @@ rather than guessed.
   ("Licence expiry date (valid until)") so plain-language questions match well.
 - **Embeddings:** `BAAI/bge-small-en-v1.5` through fastembed, running locally on CPU with no
   extra API key; questions use the model's query-embedding prefix.
-- **Retrieval:** a Milvus vector search (cosine) with a **metadata filter on `document_id` inside
-  the search**, so other documents' chunks are never candidates, not just filtered out afterwards.
+- **Retrieval (hybrid):** two searches in Milvus, each with a **metadata filter on `document_id`
+  inside the search** so other documents' chunks are never candidates:
+  - **Dense:** cosine similarity on the embeddings, which matches meaning ("when does it run out?"
+    finds the expiry date).
+  - **BM25 (sparse):** keyword search using Milvus's built-in BM25 function. Milvus tokenises each
+    chunk's `text` on insert and the question at search time, so it needs no extra model. It
+    catches exact strings that small embedding models handle poorly: licence numbers, category
+    codes ("C1"), restriction codes ("01").
+
+  The two ranked lists are merged with **Reciprocal Rank Fusion** (RRF, k = 60), and the top 10
+  go to the answering model. No query expansion or reranker: a licence is only ~15 chunks, so
+  top-10 recall is already near-complete and both would add latency for no measurable gain.
 - **Generation:** **`openai/gpt-oss-120b`** gets numbered excerpts and returns strict JSON
   `{answer, found, used_excerpts}`. Rules in the prompt:
   - answer only from the excerpts;

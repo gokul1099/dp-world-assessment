@@ -44,7 +44,8 @@ def index_page_texts(vector_store: VectorStore, document_id: str, page_texts: li
 
 def answer_question(vector_store: VectorStore, document_id: str, question: str) -> AskResponse:
     """Retrieve this document's most relevant chunks and answer only from them."""
-    hits = vector_store.search_chunks(document_id, embed_query(question), limit=TOP_K)
+    # Hybrid retrieval: dense embedding + BM25 keywords, fused with RRF.
+    hits = vector_store.search_chunks(document_id, question, embed_query(question), limit=TOP_K)
     if not hits:
         return AskResponse(answer=NOT_FOUND_ANSWER, found=False)
 

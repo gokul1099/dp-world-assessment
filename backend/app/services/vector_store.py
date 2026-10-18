@@ -1,22 +1,18 @@
-"""Milvus Lite storage: embedded in this process, persisted to data/milvus.db (no server/port).
 
-Two collections:
-- `licences`:       one row per document — the saved form (JSON) + an embedding of its summary.
-- `licence_chunks`: many rows per document — short texts with page metadata, used for Q&A.
-
-Pointing MilvusClient at a Zilliz Cloud URI instead of a file moves this to managed Milvus.
-"""
-
+import logging
 import time
 from pathlib import Path
 from typing import Any
 
-from pymilvus import DataType, MilvusClient
+from pymilvus import AnnSearchRequest, DataType, Function, FunctionType, MilvusClient, RRFRanker
 
 from app.services.embeddings import EMBEDDING_DIM
 
+logger = logging.getLogger(__name__)
+
 LICENCES = "licences"
 CHUNKS = "licence_chunks"
+RRF_K = 60  # standard Reciprocal Rank Fusion constant
 
 
 class VectorStore:
@@ -37,21 +33,42 @@ class VectorStore:
             index.add_index("vector", index_type="FLAT", metric_type="COSINE")
             self.client.create_collection(LICENCES, schema=schema, index_params=index)
 
+        if self.client.has_collection(CHUNKS) and not self._chunks_have_sparse():
+            # Older schema without the BM25 field: chunks are derived data, so rebuild.
+            logger.warning("Recreating %s with hybrid (BM25) schema", CHUNKS)
+            self.client.drop_collection(CHUNKS)
+
         if not self.client.has_collection(CHUNKS):
             schema = self.client.create_schema(auto_id=True, enable_dynamic_field=False)
             schema.add_field("id", DataType.INT64, is_primary=True)
             schema.add_field("document_id", DataType.VARCHAR, max_length=64)
             schema.add_field("page", DataType.INT64)  # 0 = unknown page
             schema.add_field("source", DataType.VARCHAR, max_length=32)  # "field" | "page_text"
-            schema.add_field("text", DataType.VARCHAR, max_length=4096)
+            # enable_analyzer: Milvus tokenises the text for BM25 keyword search.
+            schema.add_field("text", DataType.VARCHAR, max_length=4096, enable_analyzer=True)
             schema.add_field("vector", DataType.FLOAT_VECTOR, dim=EMBEDDING_DIM)
+            schema.add_field("sparse", DataType.SPARSE_FLOAT_VECTOR)
+            # Milvus fills `sparse` from `text` on insert, and from the query text on search.
+            schema.add_function(
+                Function(
+                    name="text_bm25",
+                    function_type=FunctionType.BM25,
+                    input_field_names=["text"],
+                    output_field_names=["sparse"],
+                )
+            )
             index = self.client.prepare_index_params()
             index.add_index("vector", index_type="FLAT", metric_type="COSINE")
+            index.add_index("sparse", index_type="SPARSE_INVERTED_INDEX", metric_type="BM25")
             self.client.create_collection(CHUNKS, schema=schema, index_params=index)
 
         # Collections reopened from disk start "released"; load them before reads/searches.
         for name in (LICENCES, CHUNKS):
             self.client.load_collection(name)
+
+    def _chunks_have_sparse(self) -> bool:
+        fields = self.client.describe_collection(CHUNKS)["fields"]
+        return any(field["name"] == "sparse" for field in fields)
 
     # --- saved licence record -------------------------------------------------
 
@@ -81,15 +98,29 @@ class VectorStore:
     # --- chunks for Q&A -------------------------------------------------------
 
     def search_chunks(
-        self, document_id: str, vector: list[float], limit: int = 6
+        self, document_id: str, query_text: str, query_vector: list[float], limit: int = 10
     ) -> list[dict[str, Any]]:
-        """Vector search restricted to ONE document. The filter is applied inside the search,
-        so other documents' chunks are never candidates."""
-        results = self.client.search(
+        """Hybrid search restricted to ONE document.
+
+        - dense: embedding similarity, good for meaning ("when does it run out?" → expiry date)
+        - BM25:  exact keyword match, good for codes/numbers ("TESTE901150JM9AB", "code 01")
+        Results are merged with Reciprocal Rank Fusion. The document_id filter is applied inside
+        both searches, so other documents' chunks are never candidates.
+        """
+        doc_filter = f'document_id == "{document_id}"'
+        requests = [
+            AnnSearchRequest(
+                data=[query_vector], anns_field="vector", param={}, limit=limit, expr=doc_filter
+            ),
+            AnnSearchRequest(
+                data=[query_text], anns_field="sparse", param={}, limit=limit, expr=doc_filter
+            ),
+        ]
+        results = self.client.hybrid_search(
             CHUNKS,
-            data=[vector],
+            requests,
+            ranker=RRFRanker(RRF_K),
             limit=limit,
-            filter=f'document_id == "{document_id}"',
             output_fields=["page", "source", "text"],
         )
         return [{**hit["entity"], "score": hit["distance"]} for hit in results[0]]
