@@ -10,6 +10,8 @@ import type { LicenceFields } from "@/types/licence";
 interface LicenceFormProps {
   documentId: string;
   fields: LicenceFields;
+  /** OCR text per page from the upload; saved together with the fields. */
+  pageTexts: string[];
   /** Called with the saved fields once the backend has stored them. */
   onSaved: (fields: LicenceFields) => void;
   /** Show a page of the document in the viewer (from a field's "Page N" badge). */
@@ -101,7 +103,13 @@ function validate(values: FormValues): FormErrors {
 }
 
 // Features 3 & 4 — auto-populated form the user reviews, corrects and saves.
-export function LicenceForm({ documentId, fields, onSaved, onShowPage }: LicenceFormProps) {
+export function LicenceForm({
+  documentId,
+  fields,
+  pageTexts,
+  onSaved,
+  onShowPage,
+}: LicenceFormProps) {
   const [values, setValues] = useState<FormValues>(() => toFormValues(fields));
   const [other, setOther] = useState<OtherValue[]>(() => toOtherValues(fields));
   const [errors, setErrors] = useState<FormErrors>({});
@@ -129,7 +137,11 @@ export function LicenceForm({ documentId, fields, onSaved, onShowPage }: Licence
     setSaving(true);
     setSaveError(null);
     try {
-      const saved = await updateDocumentFields(documentId, toLicenceFields(fields, values, other));
+      const saved = await updateDocumentFields(
+        documentId,
+        toLicenceFields(fields, values, other),
+        pageTexts,
+      );
       onSaved(saved.fields ?? toLicenceFields(fields, values, other));
     } catch (err) {
       setSaveError(err instanceof ApiError ? err.message : "Could not save. Please try again.");

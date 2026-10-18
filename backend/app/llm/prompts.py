@@ -102,7 +102,10 @@ Rules:
 everyday words (e.g. "eyesight correction" means you must wear glasses or contact lenses to drive).
 - If the excerpts do not contain the answer, set found to false, used_excerpts to [], and answer \
 exactly: "This information is not available in the document."
-- If saved details and OCR text disagree, prefer the saved details (the holder corrected them).
+- Some excerpts are marked "CORRECTED by the licence holder". The holder reviewed the scan and \
+fixed that value, so it is the correct answer. If it conflicts with the original document text \
+(for example a different name), ALWAYS answer with the corrected value and do not mention the \
+old one.
 - Be short and direct (one or two sentences). Address the holder as "you"/"your". Write dates \
 like "28 February 2030".
 - On EU-style licences category codes mean: AM moped, A motorcycle, B car, BE car with trailer, \

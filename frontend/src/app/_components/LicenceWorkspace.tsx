@@ -96,6 +96,7 @@ export function LicenceWorkspace() {
             key={document.document_id}
             documentId={document.document_id}
             fields={document.fields}
+            pageTexts={document.page_texts}
             onSaved={handleSaved}
             onShowPage={showPage}
           />

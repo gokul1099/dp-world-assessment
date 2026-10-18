@@ -8,12 +8,16 @@ from fastapi.concurrency import run_in_threadpool
 from app.api.deps import DocumentStoreDep, SettingsDep, VectorStoreDep
 from app.core.security import read_upload_limited, sanitize_filename
 from app.core.errors import NotFoundError
-from app.schemas.document import DocumentResponse, DocumentTextResponse, PageText
+from app.schemas.document import (
+    DocumentResponse,
+    DocumentTextResponse,
+    PageText,
+    SaveFieldsRequest,
+)
 from app.services.ingestion import ingest
 from app.schemas.licence import LicenceFields
 from app.services.extraction import extract_document
 from app.services.licence_records import save_licence_fields, validate_fields
-from app.services.rag import index_page_texts
 from app.services.storage import StoredDocument
 
 logger = logging.getLogger(__name__)
@@ -29,6 +33,7 @@ def _to_response(document: StoredDocument) -> DocumentResponse:
         page_count=document.page_count,
         status="ready",
         fields=document.fields,
+        page_texts=document.page_texts,
     )
 
 
@@ -37,9 +42,12 @@ async def upload_document(
     file: Annotated[UploadFile, File(description="Driving licence as PDF, JPG or PNG")],
     settings: SettingsDep,
     store: DocumentStoreDep,
-    vector_store: VectorStoreDep,
 ) -> DocumentResponse:
-    """Validate an uploaded licence, read it with the vision model and store the result."""
+    """Validate an uploaded licence, read it with the vision model and return everything.
+
+    Nothing is written to the database here: the frontend gets the complete result (fields +
+    page text) and sends it back on Save. Page images stay in memory only for the viewer.
+    """
     data = await read_upload_limited(file, settings.max_upload_bytes)
     # PDF rendering / image decoding is CPU-bound: keep it off the event loop.
     ingested = await run_in_threadpool(ingest, data, settings.max_pdf_pages)
@@ -55,10 +63,6 @@ async def upload_document(
         fields=extraction.fields,
     )
     store.save(document)
-    # Make the OCR text searchable right away so the chat can use it.
-    await run_in_threadpool(
-        index_page_texts, vector_store, document.document_id, document.page_texts
-    )
     logger.info("Stored document %s (%d page(s))", document.document_id, document.page_count)
     return _to_response(document)
 
@@ -93,21 +97,31 @@ async def get_document_text(document_id: str, store: DocumentStoreDep) -> Docume
 @router.put("/{document_id}/fields")
 async def save_document_fields(
     document_id: uuid.UUID,  # UUID-only: also keeps the id safe inside Milvus filter expressions
-    fields: LicenceFields,
+    body: SaveFieldsRequest,
     store: DocumentStoreDep,
     vector_store: VectorStoreDep,
 ) -> DocumentResponse:
-    """Save the reviewed/edited fields to Milvus and (re)embed them for Q&A."""
+    """Store the reviewed licence in Milvus (record + embeddings for Q&A).
+
+    First save: page text and all fields are embedded; fields the user edited are marked as
+    corrections. Later saves: only fields that changed since the last save are re-embedded.
+    """
     document = store.get(str(document_id))
     if document is None:
         raise NotFoundError("Document not found. Please upload it again.")
 
-    validate_fields(fields)
-    await run_in_threadpool(
-        save_licence_fields, vector_store, document.document_id, document.filename, fields
+    validate_fields(body.fields)
+    embedded = await run_in_threadpool(
+        save_licence_fields,
+        vector_store,
+        document.document_id,
+        document.filename,
+        document.fields,  # values shown before this save (extracted, or last saved)
+        body.fields,
+        body.page_texts or document.page_texts,
     )
-    document.fields = fields
-    logger.info("Saved fields for document %s", document.document_id)
+    document.fields = body.fields
+    logger.info("Saved document %s (%d chunk(s) embedded)", document.document_id, embedded)
     return _to_response(document)
 
 

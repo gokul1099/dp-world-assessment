@@ -99,13 +99,17 @@ with page citations, and the document stays visible next to the data so you can 
    page count are checked, and PDFs become one PNG per page (images are re-encoded, which strips
    EXIF). Each page goes to the vision model, which returns `{page_text, fields}`. Fields from all
    pages are merged (most confident value wins and keeps its `source_page`), and dates are
-   normalised to ISO. The page text is chunked, embedded and stored in Milvus right away, so chat
-   works even before saving.
-2. **Review and save (`PUT /documents/{id}/fields`):** the edited fields are validated again on
-   the server. The full record is upserted into the `licences` collection (fields as JSON, plus
-   an embedding of a short summary). Each field becomes a short chunk ("Licence expiry date
-   (valid until): 2030-02-28", page 1) in `licence_chunks`, replacing earlier field chunks for
-   that document.
+   normalised to ISO. The **complete result (fields + page text) is returned to the frontend;
+   nothing is written to the database yet**. Page images stay in memory only for the viewer.
+2. **Review and save (`PUT /documents/{id}/fields`):** the frontend sends back the reviewed fields
+   and the page text, and the server validates them again. Only now is the data stored in Milvus:
+   - the record is upserted into `licences` (fields as JSON plus a summary embedding);
+   - on the **first save**, the page text and every field are embedded into `licence_chunks`,
+     one chunk per field (e.g. "Licence expiry date (valid until): 2030-02-28", page 1);
+   - on **later saves**, only the fields that changed since the last save are re-embedded.
+
+   Fields the user edited are marked *"corrected by the licence holder"*, so answers use the
+   corrected value instead of the original scan.
 3. **Ask (`POST /documents/{id}/ask`):** a **hybrid search** runs in Milvus: dense embedding
    similarity and BM25 keyword matching, merged with Reciprocal Rank Fusion. Both run **with the
    filter `document_id == "<id>"` inside the search** (top 10). The numbered excerpts
@@ -329,3 +333,5 @@ rather than guessed.
 - **No automated tests** in the current version (removed to focus on features within the 48 h).
 - **Cold start.** The embedding model loads at startup (a few seconds; it's baked into the image).
 
+## AI development tools used:
+  - Claude as AI Assistant for writing logics for both frontend and backend and to debug issues

@@ -34,6 +34,8 @@ export interface DocumentResponse {
   page_count: number;
   status: DocumentStatus;
   fields: LicenceFields | null;
+  /** OCR text per page (index 0 = page 1). Sent back on save; nothing is stored before that. */
+  page_texts: string[];
 }
 
 export interface SourceRef {

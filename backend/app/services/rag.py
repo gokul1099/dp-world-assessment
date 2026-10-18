@@ -4,6 +4,7 @@ from app.llm.client import chat_json
 from app.llm.prompts import ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT
 from app.schemas.chat import AskResponse, SourceRef
 from app.services.embeddings import embed_query, embed_texts
+from app.services.licence_records import CORRECTED_MARKER
 from app.services.vector_store import VectorStore
 
 LINES_PER_CHUNK = 4
@@ -24,7 +25,7 @@ def chunk_page_text(text: str) -> list[str]:
     return chunks
 
 
-def index_page_texts(vector_store: VectorStore, document_id: str, page_texts: list[str]) -> None:
+def index_page_texts(vector_store: VectorStore, document_id: str, page_texts: list[str]) -> int:
     """Embed OCR text per page into Milvus (source="page_text"). Runs in a worker thread."""
     chunks = [
         (chunk, page_number)
@@ -40,6 +41,16 @@ def index_page_texts(vector_store: VectorStore, document_id: str, page_texts: li
             for (text, page), vector in zip(chunks, vectors, strict=True)
         ],
     )
+    return len(chunks)
+
+
+def _origin(hit: dict) -> str:
+    """Tell the model where an excerpt came from, so corrections can override the scan."""
+    if CORRECTED_MARKER in hit["text"]:
+        return "CORRECTED by the licence holder - overrides the original document"
+    if hit["source"] == "page_text":
+        return "original document text"
+    return "detail extracted from the document"
 
 
 def answer_question(vector_store: VectorStore, document_id: str, question: str) -> AskResponse:
@@ -50,7 +61,7 @@ def answer_question(vector_store: VectorStore, document_id: str, question: str) 
         return AskResponse(answer=NOT_FOUND_ANSWER, found=False)
 
     excerpts = "\n\n".join(
-        f"[{i}] (page {hit['page'] or 'unknown'}, {hit['source']})\n{hit['text']}"
+        f"[{i}] (page {hit['page'] or 'unknown'}; {_origin(hit)})\n{hit['text']}"
         for i, hit in enumerate(hits, start=1)
     )
     reply = chat_json(

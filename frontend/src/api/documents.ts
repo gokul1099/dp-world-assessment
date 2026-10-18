@@ -33,13 +33,16 @@ export function getDocument(documentId: string): Promise<DocumentResponse> {
   return apiRequest<DocumentResponse>(`/documents/${encodeURIComponent(documentId)}`);
 }
 
+/** Save the reviewed licence: the backend stores it (and its page text) in the vector DB. */
 export function updateDocumentFields(
   documentId: string,
   fields: LicenceFields,
+  pageTexts: string[],
 ): Promise<DocumentResponse> {
   return apiRequest<DocumentResponse>(`/documents/${encodeURIComponent(documentId)}/fields`, {
     method: "PUT",
-    body: fields,
+    body: { fields, page_texts: pageTexts },
+    timeoutMs: 60_000,
   });
 }
 

@@ -47,5 +47,6 @@ export async function mockUploadDocument(
     page_count: 1,
     status: "ready",
     fields: MOCK_FIELDS,
+    page_texts: ["DRIVING LICENCE (MOCK)\n1. SAMPLE\n2. JANE"],
   };
 }
