@@ -15,10 +15,13 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+# Bake the embedding model into the image so cold starts don't download it (~70 MB).
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/data/models')"
+
 COPY app ./app
 
-# Run as an unprivileged user.
-RUN useradd --create-home --uid 10001 appuser
+# Run as an unprivileged user that can write data/ (Milvus Lite db + model cache).
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app/data
 USER appuser
 
 EXPOSE 8080
