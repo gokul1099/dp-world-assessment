@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Frontend — Next.js (deployed to Vercel)
+# Frontend — Next.js (deployed to Google Cloud Run)
 
 UI for the driving-licence reader: upload → auto-filled editable form → ask-the-document chat,
 with the document shown beside the extracted data. Project-wide rules live in `../CLAUDE.md`.
@@ -18,7 +18,7 @@ with the document shown beside the extracted data. Project-wide rules live in `.
 
 ## Environment
 - `NEXT_PUBLIC_API_URL` — backend base URL. Local: copy `.env.example` → `.env.local`.
-  Vercel: set per environment (Production / Preview).
+  Cloud Run: set in `.env.production` (inlined at build time by `next build`).
 - `NEXT_PUBLIC_*` values are inlined into the browser bundle at build time: never put secrets
   or API keys in the frontend. The LLM key lives only in the backend.
 

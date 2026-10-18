@@ -4,7 +4,7 @@ Upload a driving licence. The app reads it with a vision LLM, fills in an editab
 what you review, and lets you chat with the licence. Every answer comes only from the document,
 with page citations, and the document stays visible next to the data so you can check it.
 
-> **Live demo:** _frontend URL (Vercel)_ · _API URL (Cloud Run)_ — _add after deployment_
+> **Live demo:** https://dl-frontend-114694440108.asia-south1.run.app · **API:** https://dl-backend-114694440108.asia-south1.run.app (`/health`)
 > **Demo video:** _link_
 
 ---
@@ -33,7 +33,7 @@ with page citations, and the document stays visible next to the data so you can 
 | Chat LLM (answers) | Groq `openai/gpt-oss-120b` with strict JSON-schema structured output |
 | Embeddings | `fastembed` with `BAAI/bge-small-en-v1.5` (384-dim, local ONNX on CPU, no API key) |
 | Vector database | **Milvus Lite**: embedded in the backend process, stored in a file, no separate server or port |
-| Hosting (target) | Frontend on **Vercel**, backend container on **Google Cloud Run** |
+| Hosting | **Google Cloud Run**: two services, `dl-frontend` (Next.js) and `dl-backend` (FastAPI) |
 
 ---
 
@@ -46,7 +46,7 @@ with page citations, and the document stays visible next to the data so you can 
                                     │
                                     ▼
       ┌───────────────────────────────────────────────────────────┐
-      │            Frontend  ·  Next.js 16  (Vercel)              │
+      │          Frontend  ·  Next.js 16  (Cloud Run)             │
       │                                                           │
       │   Upload  ──────▶  Review & edit form  ──────▶  Chat      │
       │                                                           │
@@ -77,7 +77,7 @@ with page citations, and the document stays visible next to the data so you can 
 
 **Overview**
 
-- **Frontend (Next.js on Vercel):** the user interface. The user uploads a licence, reviews and
+- **Frontend (Next.js on Cloud Run):** the user interface. The user uploads a licence, reviews and
   corrects the auto-filled form, then chats with the document. The uploaded document stays
   visible beside the data. All backend calls go through one typed API client.
 - **Backend (FastAPI on Cloud Run):** a thin route layer over four services:
@@ -115,7 +115,7 @@ with page citations, and the document stays visible next to the data so you can 
 ### Repository layout
 
 ```
-frontend/                  Next.js app (→ Vercel)
+frontend/                  Next.js app (→ Cloud Run)
   src/api/                 the only place that calls the backend (typed client, errors, timeouts)
   src/types/licence.ts     mirrors the backend Pydantic schemas
   src/features/            upload · extraction-form · chat · viewer (one folder per feature)
@@ -187,25 +187,40 @@ docker run -p 8080:8080 --env-file .env dl-backend
 | Where | Variable | Purpose |
 |---|---|---|
 | backend | `GROQ_API_KEY` | Groq API key (**required**; a secret, never commit it) |
-| backend | `ALLOWED_ORIGINS` | Comma-separated CORS origins, e.g. `http://localhost:3000,https://<app>.vercel.app` |
+| backend | `ALLOWED_ORIGINS` | Comma-separated CORS origins, e.g. `http://localhost:3000,https://dl-frontend-xxxx.run.app` |
 | backend | `ENVIRONMENT` | `local` or `production` (production hides `/docs`) |
 | backend | `GROQ_VISION_MODEL` / `GROQ_CHAT_MODEL` | Override models (defaults above) |
 | backend | `MAX_UPLOAD_MB`, `MAX_PDF_PAGES`, `DATA_DIR` | Limits and storage location |
 | frontend | `NEXT_PUBLIC_API_URL` | Backend base URL |
 | frontend | `NEXT_PUBLIC_API_MOCK` | `true` = fake API for UI work without the backend |
 
-### Deployment (Cloud Run + Vercel)
+### Deployment (Google Cloud Run)
+
+Both apps are deployed as Cloud Run services from source; Cloud Build uses each folder's
+`Dockerfile`, and `.gcloudignore` keeps `.venv`, `node_modules`, `data/` and `.env` files out of
+the upload.
 
 ```bash
-# Backend: build from source and deploy; the API key comes from Secret Manager
-gcloud run deploy dl-backend --source backend --region <region> --allow-unauthenticated \
+# 0. One-time: enable APIs and store the Groq key in Secret Manager
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+echo -n "YOUR_GROQ_KEY" | gcloud secrets create groq-api-key --data-file=-
+
+# 1. Backend (prints its URL, e.g. https://dl-backend-xxxx.run.app)
+gcloud run deploy dl-backend --source backend --region asia-south1 --allow-unauthenticated \
   --memory 2Gi --max-instances 1 \
-  --set-env-vars ENVIRONMENT=production,ALLOWED_ORIGINS=https://<app>.vercel.app \
+  --set-env-vars ENVIRONMENT=production \
   --set-secrets GROQ_API_KEY=groq-api-key:latest
+
+# 2. Frontend: put the backend URL in frontend/.env.production (NEXT_PUBLIC_API_URL; inlined at build time)
+gcloud run deploy dl-frontend --source frontend --region asia-south1 --allow-unauthenticated
+
+# 3. Allow the frontend's origin in the backend's CORS settings
+gcloud run services update dl-backend --region asia-south1 \
+  --update-env-vars ALLOWED_ORIGINS=https://dl-frontend-xxxx.run.app
 ```
 
-For the frontend, import the repo in Vercel with **Root Directory = `frontend`** and set
-`NEXT_PUBLIC_API_URL` to the Cloud Run URL.
+`--max-instances 1` is required while uploads and Milvus Lite live inside the container (see
+Known limitations).
 
 ---
 

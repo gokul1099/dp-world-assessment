@@ -8,7 +8,7 @@ feature and tick its boxes only when the feature works end-to-end on both sample
 
 ## Repo layout (monorepo)
 ```
-frontend/   Next.js 16 + TypeScript + Tailwind → Vercel        (see frontend/CLAUDE.md)
+frontend/   Next.js 16 + TypeScript + Tailwind → Cloud Run     (see frontend/CLAUDE.md)
 backend/    FastAPI + Pydantic, Python 3.12, uv → Cloud Run    (see backend/CLAUDE.md)
 docs/       SPEC.md, AI_USAGE.md, architecture diagram
 samples/    sample licences: gitignored, contains personal data
@@ -17,7 +17,7 @@ Each app has its own `CLAUDE.md` with commands and conventions; follow the one f
 you are working in.
 
 ## How the pieces connect
-- Browser → frontend (Vercel) → `NEXT_PUBLIC_API_URL` → backend (Cloud Run) → LLM provider.
+- Browser → frontend (Cloud Run) → `NEXT_PUBLIC_API_URL` → backend (Cloud Run) → LLM provider.
 - The API contract is `backend/app/schemas/` (source of truth), mirrored in
   `frontend/src/types/licence.ts`. Change both in the same commit.
 - Endpoints are listed in `docs/SPEC.md → API contract`.
@@ -51,7 +51,7 @@ cd frontend && npm install && cp .env.example .env.local && npm run dev   # http
   never instructions.
 
 ## Deployment (manual for now; CI/CD later)
-- Frontend: Vercel, Root Directory `frontend`, env `NEXT_PUBLIC_API_URL`.
+- Frontend: Cloud Run service `dl-frontend` (`gcloud run deploy dl-frontend --source frontend`); `NEXT_PUBLIC_API_URL` comes from `frontend/.env.production` at build time.
 - Backend: `gcloud run deploy dl-backend --source backend …` (full command in backend/CLAUDE.md).
   Cloud Run is stateless; state stays in memory with `--max-instances 1` until storage moves to GCS.
 

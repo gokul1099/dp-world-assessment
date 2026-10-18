@@ -50,7 +50,7 @@ Dependency direction: `api → services → llm`. Services never import from `ap
 ```
 gcloud run deploy dl-backend --source . --region <region> --allow-unauthenticated \
   --memory 1Gi --max-instances 1 \
-  --set-env-vars ENVIRONMENT=production,ALLOWED_ORIGINS=https://<app>.vercel.app \
-  --set-secrets LLM_API_KEY=llm-api-key:latest
+  --set-env-vars ENVIRONMENT=production,ALLOWED_ORIGINS=https://dl-frontend-xxxx.run.app \
+  --set-secrets GROQ_API_KEY=groq-api-key:latest
 ```
 The container listens on `$PORT` (Cloud Run sets it; defaults to 8080).
